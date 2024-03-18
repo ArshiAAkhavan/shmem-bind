@@ -35,17 +35,18 @@ impl BuilderWithSize {
         let (fd, is_owner) = unsafe {
             let storage_id: *const c_char = self.id.as_bytes().as_ptr() as *const c_char;
 
-            // try open existing shared memory
+            // open the existing shared memory if exists
             let fd = shm_open(storage_id, O_RDWR, S_IRUSR | S_IWUSR);
 
             // shared memory didn't exist
             if fd < 0 {
+                // create the shared memory
                 let fd = shm_open(storage_id, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-
                 if fd < 0 {
                     return Err(ShmemError::CreateFailedErr);
                 }
 
+                // allocate the shared memory with required size
                 let res = ftruncate(fd, self.size);
                 if res < 0 {
                     return Err(ShmemError::AllocationFailedErr);
@@ -56,6 +57,7 @@ impl BuilderWithSize {
                 (fd, false)
             }
         };
+
         let null = ptr::null_mut();
         let addr = unsafe { mmap(null, self.size as usize, PROT_WRITE, MAP_SHARED, fd, 0) };
 
@@ -92,8 +94,8 @@ impl ShmemConf {
 // SAFETY:
 // shared memory is shared between processes.
 // if it can withstand multiple processes mutating it, it can sure handle a thread or two!
-unsafe impl<T> Sync for ShmemBox<T> where T: Sync {}
-unsafe impl<T> Send for ShmemBox<T> where T: Send {}
+unsafe impl<T: Sync> Sync for ShmemBox<T> {}
+unsafe impl<T: Send> Send for ShmemBox<T> {}
 
 #[derive(Debug)]
 pub struct ShmemBox<T> {
@@ -150,8 +152,8 @@ impl<T> Drop for ShmemBox<T> {
 
         // we should close the file descriptor when dropping the pointer regardless of being its
         // owner or not
-        unsafe {
-            let _ = close(self.conf.fd);
+        if unsafe { close(self.conf.fd) } != 0 {
+            panic!("failed to close shared memory file descriptor")
         }
     }
 }
