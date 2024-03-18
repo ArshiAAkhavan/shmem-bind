@@ -7,6 +7,7 @@ authors = ["ArshiA Akhavan <letmemakenewone@gmail.com>"]
 description = "A safe and idiomatic wrapper over shared memory APIs in rust"
 keywords = ["shared_memory","shmem","shared-memory","shared-mem","shared_mem"]
 categories = ["api-bindings", "os::unix-apis"]
+repository = "https://github.com/ArshiAAkhavan/shmem-bind"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
