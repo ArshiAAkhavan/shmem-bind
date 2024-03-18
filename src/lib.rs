@@ -70,6 +70,7 @@ impl BuilderWithSize {
     }
 }
 
+#[derive(Debug)]
 pub struct ShmemConf {
     id: String,
     is_owner: bool,
@@ -94,6 +95,8 @@ impl ShmemConf {
 // if it can withstand multiple processes mutating it, it can sure handle a thread or two!
 unsafe impl<T> Sync for ShmemBox<T> where T: Sync {}
 unsafe impl<T> Send for ShmemBox<T> where T: Send {}
+
+#[derive(Debug)]
 pub struct ShmemBox<T> {
     ptr: ManuallyDrop<Box<T>>,
     conf: ShmemConf,
@@ -116,41 +119,42 @@ impl<T> ShmemBox<T> {
         // disabling cleanup for shared memory
         shmem_box.conf.is_owner = false;
 
-        shmem_box.conf.addr as *mut T
+        let addr = shmem_box.conf.addr as *mut T;
+        std::mem::forget(shmem_box);
+        addr
     }
 }
 
 impl<T> Drop for ShmemBox<T> {
     fn drop(&mut self) {
-        unsafe {
-            let _ = munmap(
-                self.ptr.as_mut() as *mut T as *mut c_void,
-                self.conf.size as usize,
-            );
-        }
+        println!("dropping");
 
         if self.conf.is_owner {
+            println!("dropping owner");
             let storage_id: *const c_char = self.conf.id.as_bytes().as_ptr() as *const c_char;
             // Safety:
             // if current process is the owner of the shared_memory,i.e. creator of the shared
             // memory, then it should clean up after.
             // the procedure is as follow:
-            // 1. unmap the shared memory from processes virtual address space.
-            // 2. unlink the shared memory completely from the os
-            unsafe {
-                let _ = shm_unlink(storage_id);
-            }
-
-            unsafe {
-                ManuallyDrop::drop(&mut self.ptr);
-            }
+            // 1. drop the inner T
+            // 2. unmap the shared memory from processes virtual address space.
+            // 3. unlink the shared memory completely from the os
+            println!("{:?}", self.ptr.as_mut() as *mut T);
+            unsafe { ManuallyDrop::drop(&mut self.ptr) };
+            println!("{:?}", self.ptr.as_mut() as *mut T);
+            // unsafe {
+            //     let _ = munmap(self.conf.addr, self.conf.size as usize);
+            // }
+            // unsafe {
+            //     let _ = shm_unlink(storage_id);
+            // }
         }
 
         // we should close the file descriptor when dropping the pointer regardless of being its
         // owner or not
-        unsafe {
-            let _ = close(self.conf.fd);
-        }
+        // unsafe {
+        //     let _ = close(self.conf.fd);
+        // }
     }
 }
 
