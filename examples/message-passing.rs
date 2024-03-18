@@ -54,13 +54,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             // assert that the new process mutated the shared memory
             assert_eq!(message.val, new_val);
+
+            // message is dropped here, shared memory IS deallocated
         }
         // child process
         2 => {
             let value = std::env::args().last().unwrap().parse()?;
 
             message.val = value;
-            let _ = ShmemBox::leak(message);
+            
+            // message is dropped here, shared memory IS NOT deallocated
         }
         _ => unimplemented!(),
     }
