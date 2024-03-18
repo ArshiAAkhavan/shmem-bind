@@ -1,8 +1,6 @@
 use std::{
     error::Error,
     fmt::Display,
-    marker::PhantomData,
-    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     ptr::{self, drop_in_place, NonNull},
 };
@@ -65,7 +63,7 @@ impl BuilderWithSize {
             id: self.id,
             is_owner,
             fd,
-            addr: NonNull::new(addr as *mut i32).ok_or(ShmemError::NullPointerErr)?,
+            addr: NonNull::new(addr as *mut _).ok_or(ShmemError::NullPointerErr)?,
             size: self.size,
         })
     }
@@ -76,7 +74,7 @@ pub struct ShmemConf {
     id: String,
     is_owner: bool,
     fd: i32,
-    addr: NonNull<i32>,
+    addr: NonNull<()>,
     size: i64,
 }
 
