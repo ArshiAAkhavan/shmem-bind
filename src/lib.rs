@@ -1,9 +1,10 @@
 use std::{
     error::Error,
     fmt::Display,
+    marker::PhantomData,
     mem::ManuallyDrop,
     ops::{Deref, DerefMut},
-    ptr,
+    ptr::{self, drop_in_place, NonNull},
 };
 
 use libc::{
@@ -64,7 +65,7 @@ impl BuilderWithSize {
             id: self.id,
             is_owner,
             fd,
-            addr,
+            addr: NonNull::new(addr as *mut i32).ok_or(ShmemError::NullPointerErr)?,
             size: self.size,
         })
     }
@@ -75,7 +76,7 @@ pub struct ShmemConf {
     id: String,
     is_owner: bool,
     fd: i32,
-    addr: *mut c_void,
+    addr: NonNull<i32>,
     size: i64,
 }
 
@@ -84,7 +85,7 @@ impl ShmemConf {
     // valid
     pub unsafe fn boxed<T>(self) -> ShmemBox<T> {
         ShmemBox {
-            ptr: unsafe { ManuallyDrop::new(Box::from_raw(self.addr as *mut T)) },
+            ptr: self.addr.cast(),
             conf: self,
         }
     }
@@ -98,7 +99,7 @@ unsafe impl<T> Send for ShmemBox<T> where T: Send {}
 
 #[derive(Debug)]
 pub struct ShmemBox<T> {
-    ptr: ManuallyDrop<Box<T>>,
+    ptr: NonNull<T>,
     conf: ShmemConf,
 }
 
@@ -119,7 +120,7 @@ impl<T> ShmemBox<T> {
         // disabling cleanup for shared memory
         shmem_box.conf.is_owner = false;
 
-        let addr = shmem_box.conf.addr as *mut T;
+        let addr = shmem_box.ptr.as_ptr();
         std::mem::forget(shmem_box);
         addr
     }
@@ -127,10 +128,7 @@ impl<T> ShmemBox<T> {
 
 impl<T> Drop for ShmemBox<T> {
     fn drop(&mut self) {
-        println!("dropping");
-
         if self.conf.is_owner {
-            println!("dropping owner");
             let storage_id: *const c_char = self.conf.id.as_bytes().as_ptr() as *const c_char;
             // Safety:
             // if current process is the owner of the shared_memory,i.e. creator of the shared
@@ -139,22 +137,24 @@ impl<T> Drop for ShmemBox<T> {
             // 1. drop the inner T
             // 2. unmap the shared memory from processes virtual address space.
             // 3. unlink the shared memory completely from the os
-            println!("{:?}", self.ptr.as_mut() as *mut T);
-            unsafe { ManuallyDrop::drop(&mut self.ptr) };
-            println!("{:?}", self.ptr.as_mut() as *mut T);
-            // unsafe {
-            //     let _ = munmap(self.conf.addr, self.conf.size as usize);
-            // }
-            // unsafe {
-            //     let _ = shm_unlink(storage_id);
-            // }
+            unsafe { drop_in_place(self.ptr.as_mut()) };
+            if unsafe { munmap(self.ptr.as_ptr() as *mut c_void, self.conf.size as usize) } != 0 {
+                panic!("failed to unmap shared memory from the virtual memory space")
+            }
+            if unsafe { shm_unlink(storage_id) } != 0 {
+                panic!("failed to reclaim shared memory")
+            }
+        } else {
+            if unsafe { munmap(self.ptr.as_ptr() as *mut c_void, self.conf.size as usize) } != 0 {
+                panic!("failed to unmap shared memory from the virtual memory space")
+            }
         }
 
         // we should close the file descriptor when dropping the pointer regardless of being its
         // owner or not
-        // unsafe {
-        //     let _ = close(self.conf.fd);
-        // }
+        unsafe {
+            let _ = close(self.conf.fd);
+        }
     }
 }
 
@@ -162,13 +162,13 @@ impl<T> Deref for ShmemBox<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.ptr
+        unsafe { self.ptr.as_ref() }
     }
 }
 
 impl<T> DerefMut for ShmemBox<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.ptr
+        unsafe { self.ptr.as_mut() }
     }
 }
 
@@ -176,6 +176,7 @@ impl<T> DerefMut for ShmemBox<T> {
 pub enum ShmemError {
     CreateFailedErr,
     AllocationFailedErr,
+    NullPointerErr,
 }
 impl Display for ShmemError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
