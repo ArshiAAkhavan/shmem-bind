@@ -1,37 +1,35 @@
+extern crate shmem_box as shmem;
+
 use std::error::Error;
-use std::mem::{self, ManuallyDrop};
+use std::mem;
 use std::process::Command;
 
 use shmem::ShmemBox;
-
-extern crate shmem_box as shmem;
 
 #[derive(Debug)]
 struct Data {
     val1: i32,
 }
 
-impl Drop for Data{
+impl Drop for Data {
     fn drop(&mut self) {
         println!("data is dropping");
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-unsafe{
-    let mut x = ManuallyDrop::new(Data{val1 : 3});
-    ManuallyDrop::drop(&mut x);
-    dbg!(x);
-
-
-    }
-
     // create new shared memory pointer with desired size
+    //
+    // first call to this function with the same FILE_LINK_ID would result in creating a new shared
+    // memory file and owning it. this would result in deleting the shared memory when the variable
+    // goes out of scope.
+    // the second call to this function will only open shared memory and would not delete it.
     let shared_mem = shmem::Builder::new("shmem-example_message-passing.shm")
         .with_size(mem::size_of::<Data>() as i64)
         .open()?;
-    
-    // wrap the raw shared memory ptr with safe typed ShmemBox
+
+    // wrap the raw shared memory ptr with desired Boxed type
+    // user must ensure that the data the pointer is pointing to is initialized and valid for use
     let mut data = unsafe { shared_mem.boxed::<Data>() };
 
     let mut args = std::env::args();
@@ -41,7 +39,7 @@ unsafe{
         1 => {
             // ensure that first process owns the shared memory (used for cleanup)
             let mut data = ShmemBox::own(data);
-            
+
             // initiate the data behind the boxed pointer
             data.val1 = 1;
 
