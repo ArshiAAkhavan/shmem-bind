@@ -81,8 +81,10 @@ pub struct ShmemConf {
 }
 
 impl ShmemConf {
-    // SAFETY: this is unsafe because there is no guarantee that the referred T is initialized or
-    // valid
+    /// # Safety
+    ///
+    /// this is unsafe because there is no guarantee that the referred T is initialized.
+    /// the caller must ensure that the value behind the pointer is initialzed before use
     pub unsafe fn boxed<T>(self) -> ShmemBox<T> {
         ShmemBox {
             ptr: self.addr.cast(),
@@ -91,9 +93,10 @@ impl ShmemConf {
     }
 }
 
-// SAFETY:
-// shared memory is shared between processes.
-// if it can withstand multiple processes mutating it, it can sure handle a thread or two!
+/// # Safety
+///
+/// shared memory is shared between processes.
+/// if it can withstand multiple processes mutating it, it can sure handle a thread or two!
 unsafe impl<T: Sync> Sync for ShmemBox<T> {}
 unsafe impl<T: Send> Send for ShmemBox<T> {}
 
@@ -125,7 +128,8 @@ impl<T> ShmemBox<T> {
 impl<T> Drop for ShmemBox<T> {
     fn drop(&mut self) {
         if self.conf.is_owner {
-            // Safety:
+            // # Safety
+            //
             // if current process is the owner of the shared_memory,i.e. creator of the shared
             // memory, then it should clean up after, that is, it should drop the inner T
             unsafe { drop_in_place(self.ptr.as_mut()) };
@@ -134,7 +138,8 @@ impl<T> Drop for ShmemBox<T> {
 }
 impl Drop for ShmemConf {
     fn drop(&mut self) {
-        // Safety:
+        // # Safety
+        //
         // if current process is the owner of the shared_memory,i.e. creator of the shared
         // memory, then it should clean up after.
         // the procedure is as follow:
@@ -190,29 +195,69 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
+    fn ownership() {
+        #[derive(Debug)]
         struct Data {
-            val1: i32,
-            _val2: f32,
-            _val3: [u8; 12],
+            val: i32,
         }
-        let shmconf = Builder::new("test-shmem")
+
+        let shmconf = Builder::new("test-shmem-box-ownership")
             .with_size(std::mem::size_of::<Data>() as i64)
             .open()
             .unwrap();
         let mut data = unsafe { shmconf.boxed::<Data>() };
-        assert_eq!(data.val1, 0);
-        data.val1 = 1;
+        assert_eq!(data.val, 0);
+        data.val = 1;
 
         ShmemBox::leak(data);
 
-        let shmconf = Builder::new("test-shmem")
+        let shmconf = Builder::new("test-shmem-box-ownership")
             .with_size(std::mem::size_of::<Data>() as i64)
             .open()
             .unwrap();
         let data = unsafe { shmconf.boxed::<Data>() };
-        assert_eq!(data.val1, 1);
+        assert_eq!(data.val, 1);
 
         let _owned_data = ShmemBox::own(data);
+    }
+
+    #[test]
+    fn multi_thread() {
+        struct Data {
+            val: i32,
+        }
+        // create new shared memory pointer with desired size
+        let shared_mem = Builder::new("test-shmem-box-multi-thread.shm")
+            .with_size(std::mem::size_of::<Data>() as i64)
+            .open()
+            .unwrap();
+
+        // wrap the raw shared memory ptr with desired Boxed type
+        // user must ensure that the data the pointer is pointing to is initialized and valid for use
+        let data = unsafe { shared_mem.boxed::<Data>() };
+
+        // ensure that first process owns the shared memory (used for cleanup)
+        let mut data = ShmemBox::own(data);
+
+        // initiate the data behind the boxed pointer
+        data.val = 1;
+
+        let new_val = 5;
+        std::thread::spawn(move || {
+            // create new shared memory pointer with desired size
+            let shared_mem = Builder::new("test-shmem-box-multi-thread.shm")
+                .with_size(std::mem::size_of::<Data>() as i64)
+                .open()
+                .unwrap();
+
+            // wrap the raw shared memory ptr with desired Boxed type
+            // user must ensure that the data the pointer is pointing to is initialized and valid for use
+            let mut data = unsafe { shared_mem.boxed::<Data>() };
+            data.val = new_val;
+        })
+        .join()
+        .unwrap();
+        // assert that the new process mutated the shared memory
+        assert_eq!(data.val, new_val);
     }
 }

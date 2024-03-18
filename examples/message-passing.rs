@@ -8,7 +8,7 @@ use shmem::ShmemBox;
 
 #[derive(Debug)]
 struct Data {
-    val1: i32,
+    val: i32,
 }
 
 impl Drop for Data {
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut data = ShmemBox::own(data);
 
             // initiate the data behind the boxed pointer
-            data.val1 = 1;
+            data.val = 1;
 
             let binary_path = args.next().unwrap();
             let new_val = 5;
@@ -53,13 +53,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             handle.wait()?;
 
             // assert that the new process mutated the shared memory
-            assert_eq!(data.val1, new_val);
+            assert_eq!(data.val, new_val);
         }
         // child process
         2 => {
             let value = std::env::args().last().unwrap().parse()?;
 
-            data.val1 = value;
+            data.val = value;
             let _ = ShmemBox::leak(data);
         }
         _ => unimplemented!(),
