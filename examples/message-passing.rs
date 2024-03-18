@@ -1,10 +1,9 @@
-extern crate shmem_box as shmem;
+extern crate shmem_bind;
+use shmem_bind::{self as shmem, ShmemBox};
 
 use std::error::Error;
 use std::mem;
 use std::process::Command;
-
-use shmem::ShmemBox;
 
 #[derive(Debug)]
 struct Message {
@@ -62,7 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let value = std::env::args().last().unwrap().parse()?;
 
             message.val = value;
-            
+
             // message is dropped here, shared memory IS NOT deallocated
         }
         _ => unimplemented!(),

@@ -1,10 +1,12 @@
 [package]
-name = "shmem-box"
+name = "shmem-bind"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["ArshiA Akhavan <letmemakenewone@gmail.com>"]
-description = "A safe and idiomatic abstraction over shared memory APIs in rust"
+description = "A safe and idiomatic wrapper over shared memory APIs in rust"
+keywords = ["shared_memory","shmem","shared-memory","shared-mem","shared_mem"]
+categories = ["api-bindings", "os::unix-apis"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

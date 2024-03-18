@@ -1,6 +1,6 @@
 # ShmemBox
 
-A safe and ideomatic abstraction over shared memory APIs in rust
+A safe and idiomatic wrapper over shared memory APIs in rust
 
 ## Quick start
 
