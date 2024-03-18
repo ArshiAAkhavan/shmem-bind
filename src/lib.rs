@@ -79,7 +79,9 @@ pub struct ShmemConf {
 }
 
 impl ShmemConf {
-    pub fn boxed<T>(self) -> ShmemBox<T> {
+    // SAFETY: this is unsafe because there is no guarantee that the referred T is initialized or
+    // valid
+    pub unsafe fn boxed<T>(self) -> ShmemBox<T> {
         ShmemBox {
             ptr: unsafe { ManuallyDrop::new(Box::from_raw(self.addr as *mut T)) },
             conf: self,
@@ -138,7 +140,7 @@ impl<T> Drop for ShmemBox<T> {
             unsafe {
                 let _ = shm_unlink(storage_id);
             }
-            
+
             unsafe {
                 ManuallyDrop::drop(&mut self.ptr);
             }
@@ -193,7 +195,7 @@ mod tests {
             .with_size(std::mem::size_of::<Data>() as i64)
             .open()
             .unwrap();
-        let mut data = shmconf.boxed::<Data>();
+        let mut data = unsafe { shmconf.boxed::<Data>() };
         assert_eq!(data.val1, 0);
         data.val1 = 1;
 
@@ -203,7 +205,7 @@ mod tests {
             .with_size(std::mem::size_of::<Data>() as i64)
             .open()
             .unwrap();
-        let data = shmconf.boxed::<Data>();
+        let data = unsafe { shmconf.boxed::<Data>() };
         assert_eq!(data.val1, 1);
 
         let _owned_data = ShmemBox::own(data);
