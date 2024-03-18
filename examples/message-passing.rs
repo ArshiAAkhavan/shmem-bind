@@ -7,13 +7,13 @@ use std::process::Command;
 use shmem::ShmemBox;
 
 #[derive(Debug)]
-struct Data {
+struct Message {
     val: i32,
 }
 
-impl Drop for Data {
+impl Drop for Message {
     fn drop(&mut self) {
-        println!("data is dropping");
+        println!("message is dropping");
     }
 }
 
@@ -25,12 +25,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     // goes out of scope.
     // the second call to this function will only open shared memory and would not delete it.
     let shared_mem = shmem::Builder::new("shmem-example_message-passing.shm")
-        .with_size(mem::size_of::<Data>() as i64)
+        .with_size(mem::size_of::<Message>() as i64)
         .open()?;
 
     // wrap the raw shared memory ptr with desired Boxed type
     // user must ensure that the data the pointer is pointing to is initialized and valid for use
-    let mut data = unsafe { shared_mem.boxed::<Data>() };
+    let mut message = unsafe { shared_mem.boxed::<Message>() };
 
     let mut args = std::env::args();
     let num_args = args.len();
@@ -38,10 +38,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         // parent process
         1 => {
             // ensure that first process owns the shared memory (used for cleanup)
-            let mut data = ShmemBox::own(data);
+            let mut message = ShmemBox::own(message);
 
             // initiate the data behind the boxed pointer
-            data.val = 1;
+            message.val = 1;
 
             let binary_path = args.next().unwrap();
             let new_val = 5;
@@ -53,14 +53,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             handle.wait()?;
 
             // assert that the new process mutated the shared memory
-            assert_eq!(data.val, new_val);
+            assert_eq!(message.val, new_val);
         }
         // child process
         2 => {
             let value = std::env::args().last().unwrap().parse()?;
 
-            data.val = value;
-            let _ = ShmemBox::leak(data);
+            message.val = value;
+            let _ = ShmemBox::leak(message);
         }
         _ => unimplemented!(),
     }
