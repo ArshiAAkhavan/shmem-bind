@@ -116,13 +116,9 @@ impl<T> ShmemBox<T> {
     // memory.
     // this function is useful when you want to create a shared memory which last longer than the
     // process creating it.
-    pub fn leak(mut shmem_box: Self) -> *mut T {
+    pub fn leak(mut shmem_box: Self) {
         // disabling cleanup for shared memory
         shmem_box.conf.is_owner = false;
-
-        let addr = shmem_box.ptr.as_ptr();
-        std::mem::forget(shmem_box);
-        addr
     }
 }
 
