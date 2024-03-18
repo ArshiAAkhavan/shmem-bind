@@ -129,30 +129,34 @@ impl<T> ShmemBox<T> {
 impl<T> Drop for ShmemBox<T> {
     fn drop(&mut self) {
         if self.conf.is_owner {
-            let storage_id: *const c_char = self.conf.id.as_bytes().as_ptr() as *const c_char;
             // Safety:
             // if current process is the owner of the shared_memory,i.e. creator of the shared
-            // memory, then it should clean up after.
-            // the procedure is as follow:
-            // 1. drop the inner T
-            // 2. unmap the shared memory from processes virtual address space.
-            // 3. unlink the shared memory completely from the os
+            // memory, then it should clean up after, that is, it should drop the inner T
             unsafe { drop_in_place(self.ptr.as_mut()) };
-            if unsafe { munmap(self.ptr.as_ptr() as *mut c_void, self.conf.size as usize) } != 0 {
-                panic!("failed to unmap shared memory from the virtual memory space")
-            }
+        }
+    }
+}
+impl Drop for ShmemConf {
+    fn drop(&mut self) {
+        // Safety:
+        // if current process is the owner of the shared_memory,i.e. creator of the shared
+        // memory, then it should clean up after.
+        // the procedure is as follow:
+        // 1. unmap the shared memory from processes virtual address space.
+        // 2. unlink the shared memory completely from the os if self is the owner
+        // 3. close the file descriptor of the shared memory
+        if unsafe { munmap(self.addr.as_ptr() as *mut c_void, self.size as usize) } != 0 {
+            panic!("failed to unmap shared memory from the virtual memory space")
+        }
+
+        if self.is_owner {
+            let storage_id: *const c_char = self.id.as_bytes().as_ptr() as *const c_char;
             if unsafe { shm_unlink(storage_id) } != 0 {
                 panic!("failed to reclaim shared memory")
             }
-        } else {
-            if unsafe { munmap(self.ptr.as_ptr() as *mut c_void, self.conf.size as usize) } != 0 {
-                panic!("failed to unmap shared memory from the virtual memory space")
-            }
         }
 
-        // we should close the file descriptor when dropping the pointer regardless of being its
-        // owner or not
-        if unsafe { close(self.conf.fd) } != 0 {
+        if unsafe { close(self.fd) } != 0 {
             panic!("failed to close shared memory file descriptor")
         }
     }
