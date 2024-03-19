@@ -11,8 +11,14 @@ cargo run --example message-passing
 
 ## Semantics:
 
+import shared memory abstractions
+```rust
+use shmem_bind::{ShmemBox, self as shmem};
+```
+
 in order to create new shared memory, use the following builder snippet:
 ```rust 
+
 let shared_mem = shmem::Builder::new("<FLINK_FILE_HANDLE>")
     .with_size(mem::size_of::<Message>() as i64)
     .open()?;
