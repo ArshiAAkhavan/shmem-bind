@@ -1,10 +1,10 @@
 [package]
 name = "shmem-bind"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["ArshiA Akhavan <letmemakenewone@gmail.com>"]
-description = "A safe and idiomatic wrapper over shared memory APIs in rust"
+description = "A safe and idiomatic wrapper over shared memory APIs in rust with proper cleanups"
 keywords = ["shared_memory", "shmem", "shared-memory", "shared-mem", "shared_mem"]
 categories = ["api-bindings", "os::unix-apis"]
 repository = "https://github.com/ArshiAAkhavan/shmem-bind"

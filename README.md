@@ -1,6 +1,6 @@
-# ShmemBox
+# shmem-bind
 
-A safe and idiomatic wrapper over shared memory APIs in rust
+A safe and idiomatic wrapper over shared memory APIs in rust with proper cleanups
 
 ## Quick start
 
