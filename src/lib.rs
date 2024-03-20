@@ -105,7 +105,7 @@ impl BuilderWithSize {
     }
 }
 
-/// `ShmemConf` is a representation of a ***mapped*** shared memory.
+/// A representation of a ***mapped*** shared memory.
 #[derive(Debug)]
 pub struct ShmemConf {
     /// `flink_id` of the shared memory to be created on the system
@@ -160,8 +160,8 @@ impl ShmemConf {
     ///
     ///     assert_eq!(*boxed_barrow_val, 5);
     ///
-    ///     // changes to boxed_barrow_val would reflect to boxed_val as well since they both point to the
-    ///     // same location.
+    ///     // changes to boxed_barrow_val would reflect to boxed_val as well since they both point
+    ///     // to the same location.
     ///     *boxed_barrow_val = 3;
     ///     assert_eq!(*boxed_val, 3);
     ///     
@@ -184,7 +184,7 @@ impl ShmemConf {
 unsafe impl<T: Sync> Sync for ShmemBox<T> {}
 unsafe impl<T: Send> Send for ShmemBox<T> {}
 
-/// a safe and typed wrapper for shared memory
+/// A safe and typed wrapper for shared memory
 ///
 /// `ShmemBox<T>` wraps the underlying pointer to the shared memory and implements `Deref` and
 /// `DerefMut` for T
