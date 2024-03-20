@@ -31,13 +31,13 @@ pub struct BuilderWithSize {
     size: i64,
 }
 impl BuilderWithSize {
-    /// ensures a shared memory using the specified `size` and `flink_id` and mapping it to the
+    /// Ensures a shared memory using the specified `size` and `flink_id` and mapping it to the
     /// virtual address of the process memory.
     ///
-    /// in case of success, a `ShmemConf` is returned, representing the configuration of the
+    /// In case of success, a `ShmemConf` is returned, representing the configuration of the
     /// allocated shared memory.
     ///
-    /// if the shared memory with the given `flink_id` is not present on the system, the call to
+    /// If the shared memory with the given `flink_id` is not present on the system, the call to
     /// `open` would create a new shared memory and claims its ownership which is later used for
     /// cleanup of the shared memory.
     ///
@@ -110,24 +110,24 @@ impl BuilderWithSize {
 pub struct ShmemConf {
     /// `flink_id` of the shared memory to be created on the system
     id: String,
-    /// wether or not this `ShmemConf` is the owner of the shared memory.
-    /// this field is set to true when the shared memory is created by this `ShmemConf`
+    /// Wether or not this `ShmemConf` is the owner of the shared memory.
+    /// This field is set to true when the shared memory is created by this `ShmemConf`
     is_owner: bool,
-    /// file descriptor of the allocated shared memory 
+    /// File descriptor of the allocated shared memory 
     fd: i32,
-    /// pointer to the shared memory
+    /// Pointer to the shared memory
     addr: NonNull<()>,
-    /// size of the allocation
+    /// Size of the allocation
     size: i64,
 }
 
 impl ShmemConf {
-    /// converts `ShmemConf`'s raw pointer to a boxed pointer of type `T`.
+    /// Converts `ShmemConf`'s raw pointer to a boxed pointer of type `T`.
     ///
     /// # Safety
     ///
-    /// this function is unsafe because there is no guarantee that the referred T is initialized.
-    /// the caller must ensure that the value behind the pointer is initialized before use.
+    /// This function is unsafe because there is no guarantee that the referred T is initialized.
+    /// The caller must ensure that the value behind the pointer is initialized before use.
     ///
     /// # Examples
     /// ```
@@ -179,8 +179,8 @@ impl ShmemConf {
 
 /// # Safety
 ///
-/// shared memory is shared between processes.
-/// if it can withstand multiple processes mutating it, it can sure handle a thread or two!
+/// Shared memory is shared between processes.
+/// If it can withstand multiple processes mutating it, it can sure handle a thread or two!
 unsafe impl<T: Sync> Sync for ShmemBox<T> {}
 unsafe impl<T: Send> Send for ShmemBox<T> {}
 
@@ -189,7 +189,7 @@ unsafe impl<T: Send> Send for ShmemBox<T> {}
 /// `ShmemBox<T>` wraps the underlying pointer to the shared memory and implements `Deref` and
 /// `DerefMut` for T
 ///
-/// when ShmemBox<T> goes out of scope, the cleanup process of the shared memory is done.
+/// When ShmemBox<T> goes out of scope, the cleanup process of the shared memory is done.
 #[derive(Debug)]
 pub struct ShmemBox<T> {
     ptr: NonNull<T>,
@@ -197,7 +197,7 @@ pub struct ShmemBox<T> {
 }
 
 impl<T> ShmemBox<T> {
-    /// owns the shared memory. this would result in shared memory cleanup when this pointer goes
+    /// Owns the shared memory. this would result in shared memory cleanup when this pointer goes
     /// out of scope.
     ///
     /// # Examples
@@ -237,9 +237,9 @@ impl<T> ShmemBox<T> {
         shmem_box
     }
 
-    /// leaks the shared memory and prevents the cleanup if the ShmemBox is the owner of the shared
+    /// Leaks the shared memory and prevents the cleanup if the ShmemBox is the owner of the shared
     /// memory.
-    /// this function is useful when you want to create a shared memory which lasts longer than the
+    /// This function is useful when you want to create a shared memory which lasts longer than the
     /// process creating it.
     ///
     /// # Examples
