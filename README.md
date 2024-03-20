@@ -1,8 +1,8 @@
 # shmem-bind
 
-A safe and idiomatic wrapper over shared memory APIs in rust with proper cleanups
+A safe and idiomatic wrapper over shared memory APIs in rust with proper cleanups.
 
-## Quick start
+## Quick start:
 
 check the `message-passing` example for better understanding
 ```bash
@@ -11,16 +11,17 @@ cargo run --example message-passing
 
 ## Semantics:
 
-import shared memory abstractions
+### Allocation:
+
+import shared memory abstractions:
 ```rust
 use shmem_bind::{ShmemBox, self as shmem};
 ```
 
 in order to create new shared memory, use the following builder snippet:
 ```rust 
-
 let shared_mem = shmem::Builder::new("<FLINK_FILE_HANDLE>")
-    .with_size(mem::size_of::<Message>() as i64)
+    .with_size(mem::size_of::<MyType>() as i64)
     .open()?;
 ```
 this will allocate a shared memory file with the specified size if the shared memory is not present on the machine.
@@ -37,15 +38,18 @@ call to this function is inherently unsafe since there is no guarantee that the 
 type NotZeroI32 = i32;
 
 let boxed_val = unsafe { 
+  // the allocated shared_memory is zeroed and thus, not a valid `NotZeroI32`
   let mut boxed_val = shared_mem.boxed::<NotZeroI32>();
   *boxed_val = 5;
+  boxed_val
   };
 ```
 the `ShmemBox` type implements `Deref` and `DerefMut` so you can use all the rust semantics and guarantee of `T` in your code
 
-When the variable goes out of scope, the `drop` implementation is called. if the shared memory is owned, the shared memory would unlink.
-in order to prevent this, you can use the `ShmemBox::leak` method.
+### Cleanup:
 
+When the variable goes out of scope, the `drop` implementation is called. if the shared memory is owned, i.e. shared memory is created by this handle, the shared memory would unlink.
+in order to prevent this, you can use the `ShmemBox::leak` method:
 ```rust
 
 struct MyType;
@@ -77,7 +81,7 @@ impl Drop for MyType{
   // output is empty
 }
 ```
-you can also use the `ShmemBox::own` to ensure cleanup of the shared memory 
+you can also use the `ShmemBox::own` to ensure cleanup of the shared memory:
 ```rust 
 struct MyType;
 
@@ -111,4 +115,4 @@ impl Drop for MyType{
 }
 ```
 
-`ShmemBox<T>` implements `Sync` and `Send` if the underlying `T` implements `Sync` and `Send` respectively
+`ShmemBox<T>` implements `Sync` and `Send` if the underlying `T` implements `Sync` and `Send` respectively.

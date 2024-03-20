@@ -31,6 +31,40 @@ pub struct BuilderWithSize {
     size: i64,
 }
 impl BuilderWithSize {
+    /// ensures a shared memory using the specified `size` and `flink_id` and mapping it to the
+    /// virtual address of the process memory.
+    ///
+    /// in case of success, a `ShmemConf` is returned, representing the configuration of the
+    /// allocated shared memory.
+    ///
+    /// if the shared memory with the given `flink_id` is not present on the system, the call to
+    /// `open` would create a new shared memory and claims its ownership which is later used for
+    /// cleanup of the shared memory.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::mem;
+    /// use shmem_bind::{self as shmem,ShmemError};
+    ///
+    /// fn main() -> Result<(),ShmemError>{
+    ///     // shared_mem is the owner
+    ///     let shared_mem = shmem::Builder::new("flink_test")
+    ///         .with_size(mem::size_of::<i32>() as i64)
+    ///         .open()?;
+    ///     {
+    ///         // shared_mem_barrow is not the owner
+    ///         let shared_mem_barrow = shmem::Builder::new("flink_test")
+    ///             .with_size(mem::size_of::<i32>() as i64)
+    ///             .open()?;
+    ///
+    ///         // shared_mem_barrow goes out of scope, the shared memory is unmapped from virtual
+    ///         // memory of the process.
+    ///     }
+    ///     // shared_mem goes out of scope, the shared memory is unmapped from virtual memory of
+    ///     // the process. after that, the shared memory is unlinked from the system.
+    ///     Ok(())
+    /// }
+    ///```
     pub fn open(self) -> Result<ShmemConf, ShmemError> {
         let (fd, is_owner) = unsafe {
             let storage_id: *const c_char = self.id.as_bytes().as_ptr() as *const c_char;
@@ -71,20 +105,70 @@ impl BuilderWithSize {
     }
 }
 
+/// `ShmemConf` is a representation of a ***mapped*** shared memory.
 #[derive(Debug)]
 pub struct ShmemConf {
+    /// `flink_id` of the shared memory to be created on the system
     id: String,
+    /// wether or not this `ShmemConf` is the owner of the shared memory.
+    /// this field is set to true when the shared memory is created by this `ShmemConf`
     is_owner: bool,
+    /// file descriptor of the allocated shared memory 
     fd: i32,
+    /// pointer to the shared memory
     addr: NonNull<()>,
+    /// size of the allocation
     size: i64,
 }
 
 impl ShmemConf {
+    /// converts `ShmemConf`'s raw pointer to a boxed pointer of type `T`.
+    ///
     /// # Safety
     ///
-    /// this is unsafe because there is no guarantee that the referred T is initialized.
-    /// the caller must ensure that the value behind the pointer is initialzed before use
+    /// this function is unsafe because there is no guarantee that the referred T is initialized.
+    /// the caller must ensure that the value behind the pointer is initialized before use.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::mem;
+    /// use shmem_bind::{self as shmem,ShmemError};
+    ///
+    /// type NotZeroI32 = i32;
+    ///
+    /// fn main() -> Result<(),ShmemError>{
+    ///     let shared_mem = shmem::Builder::new("flink_test_boxed")
+    ///         .with_size(mem::size_of::<NotZeroI32>() as i64)
+    ///         .open()?;
+    ///
+    ///     let boxed_val = unsafe {
+    ///         // the allocated shared_memory is not initialized and thus, not guaranteed to be a
+    ///         // valid `NotZeroI32`
+    ///         let mut boxed_val = shared_mem.boxed::<NotZeroI32>();
+    ///         // manually initialize the value in the unsafe block
+    ///         *boxed_val = 5;
+    ///         boxed_val
+    ///     };
+    ///
+    ///     assert_eq!(*boxed_val, 5);
+    ///
+    ///     let shared_mem = shmem::Builder::new("flink_test_boxed")
+    ///         .with_size(mem::size_of::<NotZeroI32>() as i64)
+    ///         .open()?;
+    ///
+    ///     let mut boxed_barrow_val = unsafe { shared_mem.boxed::<NotZeroI32>() };
+    ///
+    ///     assert_eq!(*boxed_barrow_val, 5);
+    ///
+    ///     // changes to boxed_barrow_val would reflect to boxed_val as well since they both point to the
+    ///     // same location.
+    ///     *boxed_barrow_val = 3;
+    ///     assert_eq!(*boxed_val, 3);
+    ///     
+    ///     Ok(())
+    /// }
+    ///
+    /// ```
     pub unsafe fn boxed<T>(self) -> ShmemBox<T> {
         ShmemBox {
             ptr: self.addr.cast(),
@@ -100,6 +184,12 @@ impl ShmemConf {
 unsafe impl<T: Sync> Sync for ShmemBox<T> {}
 unsafe impl<T: Send> Send for ShmemBox<T> {}
 
+/// a safe and typed wrapper for shared memory
+///
+/// `ShmemBox<T>` wraps the underlying pointer to the shared memory and implements `Deref` and
+/// `DerefMut` for T
+///
+/// when ShmemBox<T> goes out of scope, the cleanup process of the shared memory is done.
 #[derive(Debug)]
 pub struct ShmemBox<T> {
     ptr: NonNull<T>,
@@ -107,18 +197,82 @@ pub struct ShmemBox<T> {
 }
 
 impl<T> ShmemBox<T> {
-    // owns the shared memory. this would result in shared memory cleanup when this pointer goes
-    // out of scope
+    /// owns the shared memory. this would result in shared memory cleanup when this pointer goes
+    /// out of scope.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::mem;
+    /// use shmem_bind::{self as shmem,ShmemError,ShmemBox};
+    ///
+    /// fn main() -> Result<(),ShmemError>{
+    ///     // shared memory is created. `shared_mem` owns the shared memory
+    ///     let shared_mem = shmem::Builder::new("flink_test_own")
+    ///         .with_size(mem::size_of::<i32>() as i64)
+    ///         .open()?;
+    ///     let mut boxed_val = unsafe { shared_mem.boxed::<i32>() };
+    ///     
+    ///     // leaking the shared memory to prevent `shared_mem` from cleaning it up.
+    ///     ShmemBox::leak(boxed_val);
+    ///     
+    ///     // shared memory is already present on the machine. `shared_mem` does not own the
+    ///     // shared memory.
+    ///     let shared_mem = shmem::Builder::new("flink_test_own")
+    ///         .with_size(mem::size_of::<i32>() as i64)
+    ///         .open()?;
+    ///     let boxed_val = unsafe { shared_mem.boxed::<i32>() };
+    ///
+    ///     // own the shared memory to ensure it's cleanup when the shared_mem goes out of scope.
+    ///     let boxed_val = ShmemBox::own(boxed_val);
+    ///
+    ///     // boxed_val goes out of scope, the shared memory is cleaned up
+    ///     Ok(())
+    /// }
+    ///
+    /// ```
     pub fn own(mut shmem_box: Self) -> Self {
         shmem_box.conf.is_owner = true;
 
         shmem_box
     }
 
-    // leaks the shared memory and prevents the cleanup if the ShmemBox is the owner of the shared
-    // memory.
-    // this function is useful when you want to create a shared memory which last longer than the
-    // process creating it.
+    /// leaks the shared memory and prevents the cleanup if the ShmemBox is the owner of the shared
+    /// memory.
+    /// this function is useful when you want to create a shared memory which lasts longer than the
+    /// process creating it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::mem;
+    /// use shmem_bind::{self as shmem,ShmemError,ShmemBox};
+    ///
+    /// fn main() -> Result<(),ShmemError>{
+    ///     // shared memory is created. `shared_mem` owns the shared memory
+    ///     let shared_mem = shmem::Builder::new("flink_test_leak")
+    ///         .with_size(mem::size_of::<i32>() as i64)
+    ///         .open()?;
+    ///     let mut boxed_val = unsafe { shared_mem.boxed::<i32>() };
+    ///     
+    ///     // leaking the shared memory to prevent `shared_mem` from cleaning it up.
+    ///     ShmemBox::leak(boxed_val);
+    ///     
+    ///     // shared memory is already present on the machine. `shared_mem` does not own the
+    ///     // shared memory.
+    ///     let shared_mem = shmem::Builder::new("flink_test_leak")
+    ///         .with_size(mem::size_of::<i32>() as i64)
+    ///         .open()?;
+    ///     let boxed_val = unsafe { shared_mem.boxed::<i32>() };
+    ///
+    ///     // own the shared memory to ensure it's cleanup when the shared_mem goes out of scope.
+    ///     let boxed_val = ShmemBox::own(boxed_val);
+    ///
+    ///     // boxed_val goes out of scope, the shared memory is cleaned up
+    ///     Ok(())
+    /// }
+    ///
+    /// ```
     pub fn leak(mut shmem_box: Self) {
         // disabling cleanup for shared memory
         shmem_box.conf.is_owner = false;
